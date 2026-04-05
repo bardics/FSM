@@ -7,6 +7,7 @@ from configs.phone_power_cycle_config import (
     port,
     baudrate,
     num_power_cycles,
+    fast_ethernet_port,
 )
 
 
@@ -21,7 +22,8 @@ def power_cycle(ser, round_num, total_rounds, pass_count, fail_count):
     ser.write(b"conf t\r")
     read_until(ser, b"Switch(config)#")
 
-    ser.write(b"int fastEthernet 0/4\r")
+    ethernet_port_1 = f"int fastEthernet 0/{fast_ethernet_port}\r"
+    ser.write(ethernet_port_1.encode("ascii"))
     read_until(ser, b"Switch(config-if)#")
 
     print(" Turning off and on the POE port...")
@@ -59,8 +61,11 @@ def power_cycle(ser, round_num, total_rounds, pass_count, fail_count):
     ser.write(b"term shell\r")
     read_until(ser, b"Switch#")
 
-    print("show cdp neighbors fastEthernet 0/4 deta | grep address \n")
-    ser.write(b"show cdp neighbors fastEthernet 0/4 deta | grep address\r")
+    ethernet_port_2 = (
+        f"show cdp neighbors fastEthernet 0/{fast_ethernet_port} deta | grep address\r"
+    )
+    print(f"{ethernet_port_2}")
+    ser.write(ethernet_port_2.encode("ascii"))
     response = read_until(ser, b"Switch#", timeout=20)
 
     response_str = response.decode("utf-8", errors="ignore")
