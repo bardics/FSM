@@ -1,0 +1,23 @@
+.empty-input {
+    border: tall red;
+}
+
+.empty-input:focus {
+    border: tall red;
+}
+
+FilteredTree {
+    width: 30%;
+}
+
+#input-container {
+    width: 30%;
+    border-left: tall $primary;
+    padding: 1;
+}
+
+#output-log {
+    width: 40%;
+    border-left: tall $primary;
+    background: $boost;
+}
