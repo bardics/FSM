@@ -2,7 +2,7 @@ from textual.app import App
 from textual.widgets import Header, Footer, DirectoryTree, Input, Label, Button, RichLog
 from textual.containers import Horizontal, ScrollableContainer
 import sys
-import subprocess
+import asyncio
 
 
 class NavigableInput(Input):
@@ -105,7 +105,6 @@ class FSM(App):
         log.clear()
         log.write(f"Starting {self.selected_script_path.name}...\n")
 
-        # Save config
         config_path = (
             self.selected_script_path.parent
             / "configs"
@@ -126,22 +125,42 @@ class FSM(App):
                 log.write(f"[bold red]Error saving config: {e}[/]\n")
                 return
 
-        # Run script
         try:
-            process = subprocess.Popen(
-                [sys.executable, str(self.selected_script_path)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
+            process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-u",
+                str(self.selected_script_path),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
             )
 
             if process.stdout:
-                for line in process.stdout:
-                    log.write(line)
+                current_line = b""
+                while True:
+                    chunk = await process.stdout.read(1024)
+                    if not chunk:
+                        break
 
-            process.wait()
-            log.write(f"\n[bold green]Finished with exit code {process.returncode}[/]")
+                    for i in range(len(chunk)):
+                        char = chunk[i : i + 1]
+                        if char == b"\r":
+                            if current_line:
+                                self.sub_title = current_line.decode(
+                                    errors="replace"
+                                ).strip()
+                                current_line = b""
+                        elif char == b"\n":
+                            log.write(current_line.decode(errors="replace").strip())
+                            current_line = b""
+                        else:
+                            current_line += char
+
+                if current_line:
+                    log.write(current_line.decode(errors="replace").strip())
+
+            return_code = await process.wait()
+            self.sub_title = ""
+            log.write(f"\n[bold green]Finished with exit code {return_code}[/]")
         except Exception as e:
             log.write(f"[bold red]Execution error: {e}[/]")
 
@@ -160,3 +179,14 @@ class FSM(App):
 if __name__ == "__main__":
     app = FSM()
     app.run()
+
+    def update_run_button(self):
+        try:
+            btn = self.query_one("#run-btn", Button)
+            any_empty = any(not inp.value.strip() for inp in self.query(NavigableInput))
+            btn.disabled = any_empty
+        except Exception:
+            pass
+
+    def on_input_changed(self, event: Input.Changed):
+        self.update_run_button()
