@@ -40,18 +40,45 @@ def power_cycle(ser, round_num, total_rounds, pass_count, fail_count):
     print(f"Wait for {total_wait}s to boot - Power cycle round {round_num}")
 
     global original_stdout
-    for k in range(total_wait, 0, -1):
-        total_steps = total_rounds * total_wait
-        current_step = (round_num - 1) * total_wait + (total_wait - k + 1)
-        percent = (current_step / total_steps) * 100
-        bar_len = 30
-        filled = int(bar_len * current_step // total_steps)
-        bar = "█" * filled + "-" * (bar_len - filled)
-        original_stdout.write(
-            f"\rProgress: [{bar}] {percent:5.1f}% | Round {round_num}/{total_rounds} | {k:3}s left"
-        )
-        original_stdout.flush()
+    elapsed = 0
+    ip_found = False
+
+    while elapsed < total_wait and not ip_found:
+        if elapsed % 2 == 0 and elapsed > 0:
+            try:
+                ser.write(b"\r")
+                read_until(ser, b"Switch#", timeout=2)
+                ser.write(b"term shell\r")
+                read_until(ser, b"Switch#", timeout=2)
+
+                ethernet_port_check = f"show cdp neighbors fastEthernet 0/{fast_ethernet_port} deta | grep address\r"
+                ser.write(ethernet_port_check.encode("ascii"))
+                response = read_until(ser, b"Switch#", timeout=5)
+                response_str = response.decode("utf-8", errors="ignore")
+                ip_pattern = r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"
+                match = re.search(ip_pattern, response_str)
+
+                if match:
+                    ip_found = True
+            except Exception:
+                pass
+
+        if not ip_found:
+            remaining = total_wait - elapsed
+            total_steps = total_rounds * total_wait
+            current_step = (round_num - 1) * total_wait + elapsed
+            percent = (current_step / total_steps) * 100
+            bar_len = 30
+            filled = int(bar_len * current_step // total_steps)
+            bar = "█" * filled + "-" * (bar_len - filled)
+            original_stdout.write(
+                f"\rProgress: [{bar}] {percent:5.1f}% | Round {round_num}/{total_rounds} | {remaining:3}s left"
+            )
+            original_stdout.flush()
+
         time.sleep(1)
+        elapsed += 1
+
     original_stdout.write("\r" + " " * 100 + "\r")
     original_stdout.flush()
 
@@ -61,26 +88,51 @@ def power_cycle(ser, round_num, total_rounds, pass_count, fail_count):
     ser.write(b"term shell\r")
     read_until(ser, b"Switch#")
 
-    ethernet_port_2 = (
-        f"show cdp neighbors fastEthernet 0/{fast_ethernet_port} deta | grep address\r"
-    )
-    print(f"{ethernet_port_2}")
-    ser.write(ethernet_port_2.encode("ascii"))
-    response = read_until(ser, b"Switch#", timeout=20)
+    if not ip_found:
+        ethernet_port_2 = f"show cdp neighbors fastEthernet 0/{fast_ethernet_port} deta | grep address\r"
+        print(f"{ethernet_port_2}")
+        ser.write(ethernet_port_2.encode("ascii"))
+        response = read_until(ser, b"Switch#", timeout=20)
 
-    response_str = response.decode("utf-8", errors="ignore")
-    ip_pattern = r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"
-    match = re.search(ip_pattern, response_str)
+        response_str = response.decode("utf-8", errors="ignore")
+        ip_pattern = r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"
+        match = re.search(ip_pattern, response_str)
 
-    if match:
-        ip_address = match.group(0)
-        print(
-            f"*** Port 1 - Phone successfully registered to the network with IP: {ip_address} ***\n\n"
-        )
-        pass_count += 1
+        if match:
+            ip_address = match.group(0)
+            print(
+                f"*** Port 1 - Phone successfully registered to the network with IP: {ip_address} ***\n\n"
+            )
+            pass_count += 1
+        else:
+            print("*** Port 1 - Phone could not register to the network ***\n\n")
+            fail_count += 1
     else:
-        print("*** Port 1 - Phone could not register to the network ***\n\n")
-        fail_count += 1
+        try:
+            ser.write(b"\r")
+            read_until(ser, b"Switch#", timeout=2)
+            ser.write(b"term shell\r")
+            read_until(ser, b"Switch#", timeout=2)
+
+            ethernet_port_2 = f"show cdp neighbors fastEthernet 0/{fast_ethernet_port} deta | grep address\r"
+            ser.write(ethernet_port_2.encode("ascii"))
+            response = read_until(ser, b"Switch#", timeout=5)
+            response_str = response.decode("utf-8", errors="ignore")
+            ip_pattern = r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"
+            match = re.search(ip_pattern, response_str)
+
+            if match:
+                ip_address = match.group(0)
+                print(
+                    f"*** Port 1 - Phone successfully registered to the network with IP: {ip_address} ***\n\n"
+                )
+                pass_count += 1
+            else:
+                print("*** Port 1 - Phone could not register to the network ***\n\n")
+                fail_count += 1
+        except Exception:
+            print("*** Port 1 - Phone could not register to the network ***\n\n")
+            fail_count += 1
     return pass_count, fail_count
 
 
