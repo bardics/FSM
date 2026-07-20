@@ -37,21 +37,23 @@ def power_cycle(ser, round_num, total_rounds, pass_count, fail_count):
     read_until(ser, b"Switch#")
 
     print(time.ctime())
-    print(f"Wait for {total_wait}s to boot - Power cycle round {round_num}")
+    print(
+        f"Wait for {total_wait}s to boot OR until booted up - Power cycle round {round_num}"
+    )
 
     global original_stdout
     elapsed = 0
     ip_found = False
+    ip_address = None
 
     while elapsed < total_wait and not ip_found:
         if elapsed % 2 == 0 and elapsed > 0:
             try:
                 ser.write(b"\r")
                 read_until(ser, b"Switch#", timeout=2)
-                ser.write(b"term shell\r")
-                read_until(ser, b"Switch#", timeout=2)
 
-                ethernet_port_check = f"show cdp neighbors fastEthernet 0/{fast_ethernet_port} deta | grep address\r"
+                ethernet_port_check = f"show cdp neighbors fastEthernet 0/{fast_ethernet_port} deta | include address\r"
+                ser.reset_input_buffer()
                 ser.write(ethernet_port_check.encode("ascii"))
                 response = read_until(ser, b"Switch#", timeout=5)
                 response_str = response.decode("utf-8", errors="ignore")
@@ -60,6 +62,7 @@ def power_cycle(ser, round_num, total_rounds, pass_count, fail_count):
 
                 if match:
                     ip_found = True
+                    ip_address = match.group(0)
             except Exception:
                 pass
 
@@ -85,12 +88,15 @@ def power_cycle(ser, round_num, total_rounds, pass_count, fail_count):
     ser.write(b"\r")
     read_until(ser, b"Switch#")
 
-    ser.write(b"term shell\r")
-    read_until(ser, b"Switch#")
-
-    if not ip_found:
-        ethernet_port_2 = f"show cdp neighbors fastEthernet 0/{fast_ethernet_port} deta | grep address\r"
+    if ip_found:
+        print(
+            f"*** Port 1 - Phone successfully registered to the network with IP: {ip_address} ***\n\n"
+        )
+        pass_count += 1
+    else:
+        ethernet_port_2 = f"show cdp neighbors fastEthernet 0/{fast_ethernet_port} deta | include address\r"
         print(f"{ethernet_port_2}")
+        ser.reset_input_buffer()
         ser.write(ethernet_port_2.encode("ascii"))
         response = read_until(ser, b"Switch#", timeout=20)
 
@@ -105,32 +111,6 @@ def power_cycle(ser, round_num, total_rounds, pass_count, fail_count):
             )
             pass_count += 1
         else:
-            print("*** Port 1 - Phone could not register to the network ***\n\n")
-            fail_count += 1
-    else:
-        try:
-            ser.write(b"\r")
-            read_until(ser, b"Switch#", timeout=2)
-            ser.write(b"term shell\r")
-            read_until(ser, b"Switch#", timeout=2)
-
-            ethernet_port_2 = f"show cdp neighbors fastEthernet 0/{fast_ethernet_port} deta | grep address\r"
-            ser.write(ethernet_port_2.encode("ascii"))
-            response = read_until(ser, b"Switch#", timeout=5)
-            response_str = response.decode("utf-8", errors="ignore")
-            ip_pattern = r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"
-            match = re.search(ip_pattern, response_str)
-
-            if match:
-                ip_address = match.group(0)
-                print(
-                    f"*** Port 1 - Phone successfully registered to the network with IP: {ip_address} ***\n\n"
-                )
-                pass_count += 1
-            else:
-                print("*** Port 1 - Phone could not register to the network ***\n\n")
-                fail_count += 1
-        except Exception:
             print("*** Port 1 - Phone could not register to the network ***\n\n")
             fail_count += 1
     return pass_count, fail_count
