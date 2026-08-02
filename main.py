@@ -1,8 +1,10 @@
-from textual.app import App
-from textual.widgets import Header, Footer, DirectoryTree, Input, Label, Button, RichLog
-from textual.containers import Horizontal, ScrollableContainer
-import sys
 import asyncio
+import sys
+
+from textual.app import App
+from textual.containers import Horizontal, ScrollableContainer
+from textual.css.query import NoMatches
+from textual.widgets import Button, DirectoryTree, Footer, Header, Input, Label, RichLog
 
 
 class NavigableInput(Input):
@@ -42,7 +44,6 @@ class FilteredTree(DirectoryTree):
 
 class FSM(App):
     CSS_PATH = "style.tcss"
-    BINDINGS = [("q", "quit", "Quit")]
 
     selected_script_path = None
 
@@ -81,7 +82,7 @@ class FSM(App):
                             container.mount(inp)
                         else:
                             container.mount(NavigableInput(value=clean_line))
-            except Exception as e:
+            except OSError as e:
                 container.mount(Label(f"Error reading file: {e}"))
         else:
             container.mount(Label(f"Config not found at: {config_path}"))
@@ -121,7 +122,7 @@ class FSM(App):
                             f.write(f"{inp.config_key} = {inp.value}\n")
                         else:
                             f.write(f"{inp.value}\n")
-            except Exception as e:
+            except OSError as e:
                 log.write(f"[bold red]Error saving config: {e}[/]\n")
                 return
 
@@ -161,7 +162,7 @@ class FSM(App):
             return_code = await process.wait()
             self.sub_title = ""
             log.write(f"\n[bold green]Finished with exit code {return_code}[/]")
-        except Exception as e:
+        except OSError as e:
             log.write(f"[bold red]Execution error: {e}[/]")
 
     def update_run_button(self):
@@ -169,7 +170,7 @@ class FSM(App):
             btn = self.query_one("#run-btn", Button)
             any_empty = any(not inp.value.strip() for inp in self.query(NavigableInput))
             btn.disabled = any_empty
-        except Exception:
+        except NoMatches:
             pass
 
     def on_input_changed(self, event: Input.Changed):
@@ -179,14 +180,3 @@ class FSM(App):
 if __name__ == "__main__":
     app = FSM()
     app.run()
-
-    def update_run_button(self):
-        try:
-            btn = self.query_one("#run-btn", Button)
-            any_empty = any(not inp.value.strip() for inp in self.query(NavigableInput))
-            btn.disabled = any_empty
-        except Exception:
-            pass
-
-    def on_input_changed(self, event: Input.Changed):
-        self.update_run_button()

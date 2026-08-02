@@ -1,13 +1,14 @@
-import serial
-import time
-import sys
 import re
+import sys
+import time
+
+import serial
 from configs.phone_power_cycle_config import (
-    total_wait,
-    port,
     baudrate,
-    num_power_cycles,
     fast_ethernet_port,
+    num_power_cycles,
+    port,
+    total_wait,
 )
 
 
@@ -41,7 +42,6 @@ def power_cycle(ser, round_num, total_rounds, pass_count, fail_count):
         f"Wait for {total_wait}s to boot OR until booted up - Power cycle round {round_num}"
     )
 
-    global original_stdout
     elapsed = 0
     ip_found = False
     ip_address = None
@@ -63,7 +63,7 @@ def power_cycle(ser, round_num, total_rounds, pass_count, fail_count):
                 if match:
                     ip_found = True
                     ip_address = match.group(0)
-            except Exception:
+            except serial.SerialTimeoutException:
                 pass
 
         if not ip_found:
