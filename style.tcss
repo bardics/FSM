@@ -1,3 +1,21 @@
+AppHeader {
+    layout: horizontal;
+}
+
+AppHeader HeaderTitle {
+    width: 1fr;
+}
+
+HeaderClockSpace {
+    display: none;
+}
+
+.version {
+    width: auto;
+    padding: 0 1;
+    color: $text-muted;
+}
+
 .empty-input {
     border: tall red;
 }

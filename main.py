@@ -1,10 +1,22 @@
 import asyncio
 import sys
 
+import aiofiles
 from textual.app import App
 from textual.containers import Horizontal, ScrollableContainer
 from textual.css.query import NoMatches
-from textual.widgets import Button, DirectoryTree, Footer, Header, Input, Label, RichLog
+from textual.widgets import (
+    Button,
+    DirectoryTree,
+    Footer,
+    Header,
+    Input,
+    Label,
+    RichLog,
+    Static,
+)
+
+__version__ = "0.1.9"
 
 
 class NavigableInput(Input):
@@ -32,14 +44,19 @@ class NavigableButton(Button):
 class FilteredTree(DirectoryTree):
     def filter_paths(self, paths):
         for path in paths:
+            if path.name.startswith("__"):
+                continue
             if path.name == "configs":
                 continue
-            if path.is_file():
-                if path.suffix != ".py":
-                    continue
-                if path.name == "__init__.py":
-                    continue
+            if path.is_file() and path.suffix != ".py":
+                continue
             yield path
+
+
+class AppHeader(Header):
+    def compose(self):
+        yield from super().compose()
+        yield Static(f"v{__version__}", classes="version")
 
 
 class FSM(App):
@@ -48,7 +65,7 @@ class FSM(App):
     selected_script_path = None
 
     def compose(self):
-        yield Header()
+        yield AppHeader()
         with Horizontal():
             yield FilteredTree("src/scripts", id="tree")
             yield ScrollableContainer(id="input-container")
@@ -73,7 +90,7 @@ class FSM(App):
                     if clean_line:
                         if "=" in clean_line:
                             name, value = clean_line.split("=", 1)
-                            container.mount(Label(f"{name.strip()}"))
+                            container.mount(Label(f" {name.strip()}"))
                             inp = NavigableInput(
                                 value=value.strip(),
                                 placeholder=f"Default: {value.strip()}",
@@ -116,12 +133,12 @@ class FSM(App):
             inputs = container.query(NavigableInput)
 
             try:
-                with open(config_path, "w") as f:
+                async with aiofiles.open(config_path, "w") as f:
                     for inp in inputs:
                         if inp.config_key:
-                            f.write(f"{inp.config_key} = {inp.value}\n")
+                            await f.write(f"{inp.config_key} = {inp.value}\n")
                         else:
-                            f.write(f"{inp.value}\n")
+                            await f.write(f"{inp.value}\n")
             except OSError as e:
                 log.write(f"[bold red]Error saving config: {e}[/]\n")
                 return
@@ -160,10 +177,11 @@ class FSM(App):
                     log.write(current_line.decode(errors="replace").strip())
 
             return_code = await process.wait()
-            self.sub_title = ""
             log.write(f"\n[bold green]Finished with exit code {return_code}[/]")
         except OSError as e:
             log.write(f"[bold red]Execution error: {e}[/]")
+        finally:
+            self.sub_title = ""
 
     def update_run_button(self):
         try:
