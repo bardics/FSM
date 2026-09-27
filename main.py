@@ -72,15 +72,13 @@ class FSM(App):
             yield RichLog(id="output-log", highlight=True, markup=True)
         yield Footer()
 
-    def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected):
+    async def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected):
         self.selected_script_path = event.path
         config_path = event.path.parent / "configs" / f"{event.path.stem}_config.py"
 
         container = self.query_one("#input-container", ScrollableContainer)
 
-        container.query(NavigableInput).remove()
-        container.query(Label).remove()
-        container.query(Button).remove()
+        await container.remove_children()
 
         if config_path.exists():
             try:
@@ -108,7 +106,7 @@ class FSM(App):
         self.update_run_button()
 
         first_input = container.query(NavigableInput).first()
-        if first_input:
+        if first_input is not None:
             first_input.focus()
 
     def on_button_pressed(self, event: Button.Pressed):
