@@ -152,40 +152,42 @@ if __name__ == "__main__":
         sys.stdout = Tee(original_stdout, log_file)
 
         try:
-            ser = serial.Serial(
-                port=port,
-                baudrate=baudrate,
-                bytesize=serial.EIGHTBITS,
-                parity=serial.PARITY_NONE,
-                stopbits=serial.STOPBITS_ONE,
-                timeout=1,
-            )
-        except serial.SerialException as e:
-            print(f"Error opening serial port: {e}")
-            sys.exit(1)
+            try:
+                ser = serial.Serial(
+                    port=port,
+                    baudrate=baudrate,
+                    bytesize=serial.EIGHTBITS,
+                    parity=serial.PARITY_NONE,
+                    stopbits=serial.STOPBITS_ONE,
+                    timeout=1,
+                )
+            except serial.SerialException as e:
+                print(f"Error opening serial port: {e}")
+                sys.exit(1)
 
-        pass_count = 0
-        fail_count = 0
+            pass_count = 0
+            fail_count = 0
 
-        num_power_cycles_input = num_power_cycles
+            num_power_cycles_input = num_power_cycles
 
-        ser.write(b"\r")
-        read_until(ser, b"Switch")
+            ser.write(b"\r")
+            read_until(ser, b"Switch")
 
-        ser.write(b"en\r")
-        read_until(ser, b"Switch#")
+            ser.write(b"en\r")
+            read_until(ser, b"Switch#")
 
-        for i in range(1, num_power_cycles_input + 1):
-            pass_count, fail_count = power_cycle(
-                ser, i, num_power_cycles_input, pass_count, fail_count
-            )
+            for i in range(1, num_power_cycles_input + 1):
+                pass_count, fail_count = power_cycle(
+                    ser, i, num_power_cycles_input, pass_count, fail_count
+                )
 
-        print("\n\n")
-        print("**************************************")
-        print(f"***** POWER CYCLE PASSED {pass_count} times *****")
-        print(f"***** POWER CYCLE FAILED {fail_count} times *****")
-        print("**************************************")
-        print("\n\n")
+            print("\n\n")
+            print("**************************************")
+            print(f"***** POWER CYCLE PASSED {pass_count} times *****")
+            print(f"***** POWER CYCLE FAILED {fail_count} times *****")
+            print("**************************************")
+            print("\n\n")
 
-        ser.close()
-        sys.stdout = original_stdout
+            ser.close()
+        finally:
+            sys.stdout = original_stdout

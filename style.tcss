@@ -34,6 +34,16 @@ FilteredTree {
     padding: 1;
 }
 
+#button-row {
+    height: auto;
+    dock: bottom;
+}
+
+#button-row Button {
+    width: 1fr;
+    min-width: 0;
+}
+
 #output-log {
     width: 40%;
     border-left: tall $primary;

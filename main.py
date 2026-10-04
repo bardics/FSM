@@ -15,6 +15,7 @@ from textual.widgets import (
     RichLog,
     Static,
 )
+from textual.worker import Worker
 
 __version__ = "0.1.9"
 
@@ -59,10 +60,17 @@ class AppHeader(Header):
         yield Static(f"v{__version__}", classes="version")
 
 
+class ButtonRow(Horizontal):
+    def compose(self):
+        yield NavigableButton("Run", variant="success", id="run-btn")
+        yield NavigableButton("Stop", variant="error", id="stop-btn", disabled=True)
+
+
 class FSM(App):
     CSS_PATH = "style.tcss"
 
     selected_script_path = None
+    worker: Worker | None = None
 
     def compose(self):
         yield AppHeader()
@@ -102,16 +110,37 @@ class FSM(App):
         else:
             container.mount(Label(f"Config not found at: {config_path}"))
 
-        container.mount(NavigableButton("Run", variant="success", id="run-btn"))
-        self.update_run_button()
+        await container.mount(ButtonRow(id="button-row"))
+        self.update_run_buttons()
 
-        first_input = container.query(NavigableInput).first()
+        first_input = next(iter(container.query(NavigableInput)), None)
         if first_input is not None:
             first_input.focus()
 
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "run-btn":
-            self.run_worker(self.execute_script())
+            self.start_script()
+        elif event.button.id == "stop-btn":
+            self.stop_script()
+
+    def start_script(self):
+        if not self.selected_script_path:
+            return
+        self.worker = self.run_worker(
+            self.execute_script(),
+            name="execute_script",
+            group="run",
+            exclusive=True,
+        )
+        self.update_run_buttons()
+
+    def stop_script(self):
+        if self.worker is not None and not self.worker.is_finished:
+            self.worker.cancel()
+
+    def on_worker_state_changed(self, event: Worker.StateChanged):
+        if event.worker.group == "run" and event.worker.is_finished:
+            self.update_run_buttons()
 
     async def execute_script(self):
         if not self.selected_script_path:
@@ -141,6 +170,7 @@ class FSM(App):
                 log.write(f"[bold red]Error saving config: {e}[/]\n")
                 return
 
+        process = None
         try:
             process = await asyncio.create_subprocess_exec(
                 sys.executable,
@@ -178,19 +208,40 @@ class FSM(App):
             log.write(f"\n[bold green]Finished with exit code {return_code}[/]")
         except OSError as e:
             log.write(f"[bold red]Execution error: {e}[/]")
+        except asyncio.CancelledError:
+            log.write("\n[bold yellow]Stopped by user[/]")
+            raise
         finally:
             self.sub_title = ""
+            await self._terminate_process(process)
 
-    def update_run_button(self):
+    async def _terminate_process(self, process):
+        if process is None or process.returncode is not None:
+            return
+        try:
+            process.terminate()
+        except ProcessLookupError:
+            return
+        try:
+            await asyncio.wait_for(process.wait(), timeout=3)
+        except asyncio.TimeoutError:
+            process.kill()
+
+    def update_run_buttons(self):
+        busy = self.worker is not None and not self.worker.is_finished
         try:
             btn = self.query_one("#run-btn", Button)
             any_empty = any(not inp.value.strip() for inp in self.query(NavigableInput))
-            btn.disabled = any_empty
+            btn.disabled = busy or any_empty
+        except NoMatches:
+            pass
+        try:
+            self.query_one("#stop-btn", Button).disabled = not busy
         except NoMatches:
             pass
 
     def on_input_changed(self, event: Input.Changed):
-        self.update_run_button()
+        self.update_run_buttons()
 
 
 if __name__ == "__main__":
